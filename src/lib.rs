@@ -142,16 +142,12 @@
 #![no_std]
 
 use core::marker::PhantomData;
-pub use embedded_hal::spi::{MODE_0, MODE_3};
-use embedded_hal::{blocking::spi::Write, digital::v2::OutputPin};
 
 /// All possible errors in this crate
 #[derive(Debug, PartialEq)]
-pub enum Error<CommE, PinE> {
+pub enum Error<CommE> {
     /// Communication error
     Comm(CommE),
-    /// Pin error
-    Pin(PinE),
     /// The channel provided is not available in the current device (MCP4xx1)
     InvalidChannel,
     /// The value provided does not fit the bitness of the current device
@@ -174,12 +170,31 @@ pub enum Channel {
 
 /// MCP49xx digital potentiometer driver
 #[derive(Debug)]
-pub struct Mcp49xx<CS, SPI, RES, CH, BUF> {
-    cs: CS,
-    _spi: PhantomData<SPI>,
+pub struct Mcp49xx<SPI, RES, CH, BUF> {
+    spi_device: SPI,
     _resolution: PhantomData<RES>,
     _channels: PhantomData<CH>,
     _buffering: PhantomData<BUF>,
+}
+
+impl<
+        SPI: SpiDevice,
+        RES: ResolutionSupport<SPI::Error>,
+        CH: ChannelSupport<SPI::Error>,
+        BUF: BufferingSupport<SPI::Error>,
+    > Mcp49xx<SPI, RES, CH, BUF>
+{
+    /// nigga
+    pub async fn send(&mut self, command: Command) -> Result<(), Error<SPI::Error>> {
+        CH::check_channel_is_appropriate(command.channel)?;
+        RES::check_value_is_appropriate(command.value)?;
+        BUF::check_buffering_is_appropriate(command.buffered)?;
+        let value = RES::get_value_for_spi(command.value);
+
+        let payload: [u8; 2] = [command.get_config_bits() | value[0], value[1]];
+        let result = self.spi_device.write(&payload).await.map_err(Error::Comm);
+        result
+    }
 }
 
 /// Markers
@@ -202,40 +217,12 @@ pub mod marker {
     pub struct Unbuffered(());
 }
 
-impl<CS, SPI, RES, CH, BUF, CommE, PinE> Mcp49xx<CS, SPI, RES, CH, BUF>
-where
-    CS: OutputPin<Error = PinE>,
-    SPI: Write<u8, Error = CommE>,
-    RES: ResolutionSupport<CommE, PinE>,
-    CH: ChannelSupport<CommE, PinE>,
-    BUF: BufferingSupport<CommE, PinE>,
-{
-    /// Send command to device.
-    ///
-    /// This will return an error if the command is not appropriate for the current device:
-    /// - If the channel is not available it will return `Error::InvalidChannel`.
-    /// - If the value is too big it will return `Error::InvalidValue`.
-    /// - If buffering is not supported it will return `Error::BufferingNotSupported`.
-    ///
-    /// Otherwise if a communication error happened it will return `Error::Comm`.
-    pub fn send(&mut self, spi: &mut SPI, command: Command) -> Result<(), Error<CommE, PinE>> {
-        CH::check_channel_is_appropriate(command.channel)?;
-        RES::check_value_is_appropriate(command.value)?;
-        BUF::check_buffering_is_appropriate(command.buffered)?;
-        let value = RES::get_value_for_spi(command.value);
-
-        self.cs.set_low().map_err(Error::Pin)?;
-        let payload: [u8; 2] = [command.get_config_bits() | value[0], value[1]];
-        let result = spi.write(&payload).map_err(Error::Comm);
-        self.cs.set_high().map_err(Error::Pin)?;
-        result
-    }
-}
-
 mod command;
 mod construction;
 
 mod resolution;
+use embedded_hal_async::spi::SpiDevice;
+
 pub use crate::command::Command;
 #[doc(hidden)]
 pub use crate::resolution::ResolutionSupport;

@@ -1,12 +1,12 @@
 use crate::{marker, private, Channel, Error};
 
 #[doc(hidden)]
-pub trait ChannelSupport<CommE, PinE>: private::Sealed {
-    fn check_channel_is_appropriate(channel: Channel) -> Result<(), Error<CommE, PinE>>;
+pub trait ChannelSupport<CommE>: private::Sealed {
+    fn check_channel_is_appropriate(channel: Channel) -> Result<(), Error<CommE>>;
 }
 
-impl<CommE, PinE> ChannelSupport<CommE, PinE> for marker::SingleChannel {
-    fn check_channel_is_appropriate(channel: Channel) -> Result<(), Error<CommE, PinE>> {
+impl<CommE> ChannelSupport<CommE> for marker::SingleChannel {
+    fn check_channel_is_appropriate(channel: Channel) -> Result<(), Error<CommE>> {
         if channel != Channel::Ch0 {
             Err(Error::InvalidChannel)
         } else {
@@ -15,8 +15,8 @@ impl<CommE, PinE> ChannelSupport<CommE, PinE> for marker::SingleChannel {
     }
 }
 
-impl<CommE, PinE> ChannelSupport<CommE, PinE> for marker::DualChannel {
-    fn check_channel_is_appropriate(_channel: Channel) -> Result<(), Error<CommE, PinE>> {
+impl<CommE> ChannelSupport<CommE> for marker::DualChannel {
+    fn check_channel_is_appropriate(_channel: Channel) -> Result<(), Error<CommE>> {
         Ok(())
     }
 }

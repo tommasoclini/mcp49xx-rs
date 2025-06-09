@@ -1,13 +1,6 @@
 use crate::{marker, Mcp49xx};
 use core::marker::PhantomData;
 
-impl<SPI, CS, RES, CH, BUF> Mcp49xx<CS, SPI, RES, CH, BUF> {
-    /// Destroy driver instance, return CS output pin.
-    pub fn destroy(self) -> CS {
-        self.cs
-    }
-}
-
 macro_rules! impl_create {
     ($dev:expr, $create:ident, $resolution:ident, $channels:ident, $buffering:ident) => {
         impl_create! {
@@ -17,12 +10,11 @@ macro_rules! impl_create {
     };
 
     ( @gen [$create:ident, $resolution:ident, $channels:ident, $buffering:ident, $doc:expr] ) => {
-        impl<SPI, CS> Mcp49xx<CS, SPI, marker::$resolution, marker::$channels, marker::$buffering> {
+        impl<SPI> Mcp49xx<SPI, marker::$resolution, marker::$channels, marker::$buffering> {
             #[doc = $doc]
-            pub fn $create(chip_select: CS) -> Self {
+            pub fn $create(spi_device: SPI) -> Self {
                 Mcp49xx {
-                    cs: chip_select,
-                    _spi: PhantomData,
+                    spi_device,
                     _resolution: PhantomData,
                     _channels: PhantomData,
                     _buffering: PhantomData,
